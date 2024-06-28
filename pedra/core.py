@@ -2,13 +2,17 @@
 import os
 import datetime
 import numpy as np
-import matplotlib.pyplot as plt
 from astropy.io import fits
 from astropy import wcs
-from copy import copy
+from astropy.coordinates import SkyCoord
+import astropy.units as u
 import rebin
-
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
+import copy
+import warnings
 from cana.util import kwargupdate
+from scipy.ndimage import rotate
 
 from astropy.io.fits.verify import VerifyWarning
 import warnings
@@ -190,7 +194,7 @@ class Image(object):
         """
         assert self.wcs is not None, "WCS not available, try from_header method"
         ra, dec = list(np.array(self.wcs.pixel_to_world_values(*self.centerpixel)))   
-        return (ra, dec)
+        return SkyCoord(ra, dec, unit=u.deg)
     
     @property
     def shape(self):
@@ -199,6 +203,15 @@ class Image(object):
         """
         return self.data.shape
 
+
+    def copy(self, deep=True):
+        r"""Return a copy of the object."""
+        if deep:
+            return copy.deepcopy(self)
+        else:
+            return copy.copy(self)
+        
+    
     def dist_from_center(self, row, col):
         r"""
         Distance from pixel to center in world coordinate angles. 
@@ -263,7 +276,7 @@ class Image(object):
         Trimmed Image object
         """
         # generate output
-        img = copy(self)
+        img = self.copy()
         # cutting image array
         img.data = self.data[tlims[1][0]:tlims[1][1], tlims[0][0]:tlims[0][1]]
         # handlig label
@@ -300,7 +313,7 @@ class Image(object):
         Binned Image
         """
         # generate output
-        img = copy(self)
+        img = self.copy()
         # binning image array
         img.data = rebin.rebin(self.data, binsize, func=func)
         # handlig label
@@ -336,7 +349,7 @@ class Image(object):
         Normalized Image object
         '''
         # generate output
-        img = copy(self)
+        img = self.copy()
         # normalizing image array
         aux = func(img.data, axis=axis)
         img.data = img.data / aux
@@ -370,32 +383,73 @@ class Image(object):
             outfile += '.fits'
         hdu.writeto(outdir+outfile, overwrite=True)
 
-    def make_mask(self, val=0): # -> rever isso daqui
+    def nan_mask(self, replace=0): # -> rever isso daqui
         r"""
         """
-        # if (not mask_err) | (self.err is None):
-        #     mask = np.mask_where(img.data == 0, img.data, copy=False)
-        # else:
-        #     mask = np.mask_where((img.data == 0) | (img.err == 0),
-        #                          img.data, copy=False)
-        # self.mask = mask
+        if self.mask is None:
+            self.mask = np.isnan(self.data)
+            self.data = np.nan_to_num(self.data, replace)
+        else:
+            self.data[self.mask.mask] = replace
+
+    def mask_value(self, val=0, replace=np.nan): # -> rever isso daqui
+        r"""
+        """
+        self.mask = self.data == val
+        self.data[self.mask] = replace
+
+    def north_angle(self):
+        r"""
+        """
+        if self.wcs is None:
+            raise Exception("WCS not specified") 
+            # data_filled = np.nan_to_num(self.data, nan=0.0)
+        # Calculate the position angle of celestial north at the image center
+        north_coord = SkyCoord(self.centercoords.ra, self.centercoords.dec + 1 * u.deg, frame='icrs')
+        north_pixel = self.wcs.world_to_pixel(north_coord)
+        delta_y, delta_x = north_pixel[0] - self.centerpixel[0], north_pixel[1] - self.centerpixel[1]
+        angle = np.arctan2(delta_y, delta_x) * 180 / np.pi
+        return angle
+
+    def align_north(self):
+        r"""
+        """
+        angle = self.north_angle()
+        if np.isnan(self.data).any():
+            warnings.warn("Warning: np.nan values exists in image data. A mask will be created. \n"
+                          "see")
+            self.nan_mask()
+        # Rotate the image and the mask
+        self.data = rotate(self.data, angle, reshape=True)
+        self.mask = rotate(self.mask.astype(float), angle, reshape=True) > 0.5
+        self.mask_value()
+        # Update the header with the new WCS information
+        # Handle both PC and CD matrices
+        rotation_matrix = np.array([[np.cos(np.deg2rad(angle)), -np.sin(np.deg2rad(angle))],
+                                    [np.sin(np.deg2rad(angle)), np.cos(np.deg2rad(angle))]])
+
+        if self.wcs.wcs.has_cd():
+            self.wcs.wcs.cd = np.dot(rotation_matrix, self.wcs.wcs.cd)
+        else:
+            self.wcs.wcs.pc = np.dot(rotation_matrix, self.wcs.wcs.pc)
+
 
     def __sub__(self, value):
-        img = copy(self)
+        img = self.copy()
         if isinstance(value, Image):
             value = value.data
         img.data = self.data - value
         return img
 
     def __add__(self, value):
-        img = copy(self)
+        img = self.copy()
         if isinstance(value, Image):
             value = value.data
         img.data = self.data + value
         return img
 
     def __div__(self, value):
-        img = copy(self)
+        img = self.copy()
         if isinstance(value, Image):
             assert len(self.data) == len(value.data)
             img.data = np.divide(self.data, value.data)
@@ -404,7 +458,7 @@ class Image(object):
         return img
 
     def __mul__(self, value):
-        img = copy(self)
+        img = self.copy()
         if isinstance(value, Image):
             assert len(self.data) == len(value.data)
             img.data = np.multiply(self.data, value.data)
@@ -413,8 +467,9 @@ class Image(object):
         return img
 
 
-    def view(self, ax=None, show=False,
-                savefig=False, figdir='.', **kwargs):
+    def view(self, ax=None, show=False, savefig=False, figdir='.',
+             sliders=True, scale=True, wcs=True,
+              **kwargs):
             r''' Display image
 
             Parameters
@@ -436,19 +491,47 @@ class Image(object):
 
             **kwargs: matplotlib kwargs
 
-            '''
+            ''' 
+                    
             # setting default values for image plot with matplotlib
             kwargs_defaults = {'cmap': plt.cm.gray, 
-                            'vmin': np.nanmean(self.data) - 5*np.nanstd(self.data),
-                            'vmax': np.nanmean(self.data) + 5*np.nanstd(self.data),
-                            'origin': 'lower'}
+                               'vmin': np.nanmean(self.data) - np.nanstd(self.data),
+                               'vmax': np.nanmean(self.data) + np.nanstd(self.data),
+                               'origin': 'lower'}
             kwargs = kwargupdate(kwargs_defaults, kwargs)
-            print(kwargs['vmin'], kwargs['vmax'])
+            # print(kwargs['vmin'], kwargs['vmax'])
             # plotting image
+            fig = plt.gcf()
+            if self.wcs is not None:
+               if wcs:
+                   ax = plt.subplot(projection=self.wcs)
             if ax is None:
-                fig = plt.figure()
                 ax = fig.gca()
             im = ax.imshow(self.data, **kwargs)
+            # Vmin, Vmax controls
+            # if sliders:
+            #     fig.subplots_adjust(left=0.25, bottom=0.25)
+            #     # Make a horizontal slider to control the vmin.
+            #     axvmin = fig.add_axes([0.25, 0.0, 0.65, 0.03])
+            #     vmin_slider = Slider(ax=axvmin,
+            #                          label='Vmin',
+            #                          valmin=self.data.min(),
+            #                          valmax=self.data.max(),
+            #                          valinit=0)
+            #     # # Make a horizontal slider to control the frequency.
+            #     # axvmin = fig.add_axes([0.25, 0.1, 0.65, 0.03])
+            #     # vmin_slider = Slider(
+            #     #     ax=axvmin,
+            #     #     label='Vmin',
+            #     #     valmin=self.data.min(),
+            #     #     valmax=self.data.max(),
+            #     #     valinit=kwargs['vmin'],
+            #     # )
+            #     def update_vmin(val):
+            #         im.set_vmin(vmin_slider.val)
+            #     def update_vmax(val):
+            #         im.set_vmin(vmin_slider.val)
+            #     vmin_slider.on_changed(update_vmin)
             # outputing image
             if savefig:
                 plt.savefig(figdir+self.name+'.png')
@@ -506,9 +589,6 @@ class Image(object):
         header_widget.insert("0.0", header_text)  
         header_widget.pack(padx=5, pady=5, fill='both') 
         header_window.mainloop()
-
-    def close_window(self, root):
-        root.destroy()
 
     def __repr__(self):
         # wcs

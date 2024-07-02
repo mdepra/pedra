@@ -1,24 +1,25 @@
 
 import os
 import datetime
+import copy
+import warnings
+from scipy.ndimage import rotate
 import numpy as np
+import matplotlib as plt
 from astropy.io import fits
 from astropy import wcs
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import rebin
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
-import copy
-import warnings
-from cana.util import kwargupdate
-from scipy.ndimage import rotate
+import customtkinter as ctk
+
 
 from astropy.io.fits.verify import VerifyWarning
 import warnings
 warnings.simplefilter('ignore', category=VerifyWarning)
 
-import customtkinter as ctk
+from .viewer import ImageViewer
+
 
 def loadimage_batch(imglist, data_ext=0, header_ext=0, wcs_ext=None,
                     err_ext=None, mask=None, labels=None, **kwargs):
@@ -383,14 +384,11 @@ class Image(object):
             outfile += '.fits'
         hdu.writeto(outdir+outfile, overwrite=True)
 
-    def nan_mask(self, replace=0): # -> rever isso daqui
+    def mask_nan(self, replace=0): # -> rever isso daqui
         r"""
         """
-        if self.mask is None:
-            self.mask = np.isnan(self.data)
-            self.data = np.nan_to_num(self.data, replace)
-        else:
-            self.data[self.mask.mask] = replace
+        self.mask = np.isnan(self.data)
+        self.data[self.mask] = replace
 
     def mask_value(self, val=0, replace=np.nan): # -> rever isso daqui
         r"""
@@ -418,20 +416,20 @@ class Image(object):
         if np.isnan(self.data).any():
             warnings.warn("Warning: np.nan values exists in image data. A mask will be created. \n"
                           "see")
-            self.nan_mask()
+            self.mask_nan()
         # Rotate the image and the mask
         self.data = rotate(self.data, angle, reshape=True)
         self.mask = rotate(self.mask.astype(float), angle, reshape=True) > 0.5
-        self.mask_value()
+        # self.mask_value()
         # Update the header with the new WCS information
         # Handle both PC and CD matrices
         rotation_matrix = np.array([[np.cos(np.deg2rad(angle)), -np.sin(np.deg2rad(angle))],
                                     [np.sin(np.deg2rad(angle)), np.cos(np.deg2rad(angle))]])
-
         if self.wcs.wcs.has_cd():
             self.wcs.wcs.cd = np.dot(rotation_matrix, self.wcs.wcs.cd)
         else:
             self.wcs.wcs.pc = np.dot(rotation_matrix, self.wcs.wcs.pc)
+        self.mask_value(0, np.nan)
 
 
     def __sub__(self, value):
@@ -467,8 +465,50 @@ class Image(object):
         return img
 
 
-    def view(self, ax=None, show=False, savefig=False, figdir='.',
-             sliders=True, scale=True, wcs=True,
+    def hdr_window(self):
+        header_window = ctk.CTk()
+        header_window.title("Header")
+        header_window.geometry("600x720")
+        # Create a Text widget to display text
+        header_text = self.hdr.__repr__()
+        header_widget = ctk.CTkTextbox(header_window, wrap="word")
+        # Insert vext
+        header_widget.insert("0.0", header_text)  
+        header_widget.pack(padx=5, pady=5, fill='both') 
+        header_window.mainloop()
+
+
+    def __repr__(self):
+        # wcs
+        if self.wcs is not None:
+            wcs = True
+        else: 
+            wcs = False
+        # error
+        if self.err is not None:
+            err = True
+        else: 
+            err = False      
+        # mask
+        if self.mask is not None:
+            mask = True
+        else: 
+            mask = False
+        return (f"Image label: {self.label} \n"
+                f" Shape: {self.shape} \n"
+                f" WCS: {wcs} \n"
+                f" Error array: {err} \n"
+                f" Mask: {mask} \n")
+    
+
+    def view(self, ax=None, fig=None,
+             show=False, savefig=False, figdir='.',
+             wcs=True, 
+             vsliders=False, 
+             cardinal='NE',
+             sundirection=True,
+             cardinal_kwargs=None, 
+             label_kwargs=None,
               **kwargs):
             r''' Display image
 
@@ -492,122 +532,56 @@ class Image(object):
             **kwargs: matplotlib kwargs
 
             ''' 
-                    
-            # setting default values for image plot with matplotlib
-            kwargs_defaults = {'cmap': plt.cm.gray, 
-                               'vmin': np.nanmean(self.data) - np.nanstd(self.data),
-                               'vmax': np.nanmean(self.data) + np.nanstd(self.data),
-                               'origin': 'lower'}
-            kwargs = kwargupdate(kwargs_defaults, kwargs)
-            # print(kwargs['vmin'], kwargs['vmax'])
-            # plotting image
-            fig = plt.gcf()
-            if self.wcs is not None:
-               if wcs:
-                   ax = plt.subplot(projection=self.wcs)
-            if ax is None:
-                ax = fig.gca()
-            im = ax.imshow(self.data, **kwargs)
-            # Vmin, Vmax controls
-            # if sliders:
-            #     fig.subplots_adjust(left=0.25, bottom=0.25)
-            #     # Make a horizontal slider to control the vmin.
-            #     axvmin = fig.add_axes([0.25, 0.0, 0.65, 0.03])
-            #     vmin_slider = Slider(ax=axvmin,
-            #                          label='Vmin',
-            #                          valmin=self.data.min(),
-            #                          valmax=self.data.max(),
-            #                          valinit=0)
-            #     # # Make a horizontal slider to control the frequency.
-            #     # axvmin = fig.add_axes([0.25, 0.1, 0.65, 0.03])
-            #     # vmin_slider = Slider(
-            #     #     ax=axvmin,
-            #     #     label='Vmin',
-            #     #     valmin=self.data.min(),
-            #     #     valmax=self.data.max(),
-            #     #     valinit=kwargs['vmin'],
-            #     # )
-            #     def update_vmin(val):
-            #         im.set_vmin(vmin_slider.val)
-            #     def update_vmax(val):
-            #         im.set_vmin(vmin_slider.val)
-            #     vmin_slider.on_changed(update_vmin)
-            # outputing image
+            viewer = ImageViewer(wcs=wcs, 
+                                 vsliders=vsliders, 
+                                 cardinal=cardinal,
+                                 sundirection=sundirection)
+            fig, ax = viewer.plot(self, ax=ax, fig=fig,
+                                  cardinal_kwargs=cardinal_kwargs, 
+                                  label_kwargs=label_kwargs,
+                                  **kwargs)
+
             if savefig:
                 plt.savefig(figdir+self.name+'.png')
             if show:
                 plt.show()
-            return im
+            return fig, ax
 
-    def view_contour(self, ax=None, show=False,
-                savefig=False, figdir='.', **kwargs):
-            r''' Display image
+    # def view_contour(self, ax=None, show=False,
+    #             savefig=False, figdir='.', **kwargs):
+    #         r''' Display image
 
-            Parameters
-            ----------
-            fax (Optional): None, matplotlib.axes
-                If desired to subplot image in a figure. Default is 'None', which
-                will open a new plt.figure()
+    #         Parameters
+    #         ----------
+    #         fax (Optional): None, matplotlib.axes
+    #             If desired to subplot image in a figure. Default is 'None', which
+    #             will open a new plt.figure()
 
-            show (Optional): boolean
-                True if want to plt.show(). Default is True.
+    #         show (Optional): boolean
+    #             True if want to plt.show(). Default is True.
 
-            savefig (Optional): boolean
-                True if want to save image.
+    #         savefig (Optional): boolean
+    #             True if want to save image.
 
-            figdir (Optional): str
-                Only needed if savefig=True. Directory for saving image.
-                The file basename will be the same name of the image fitsfile.
-                The image extention is .png.
+    #         figdir (Optional): str
+    #             Only needed if savefig=True. Directory for saving image.
+    #             The file basename will be the same name of the image fitsfile.
+    #             The image extention is .png.
 
-            **kwargs: matplotlib kwargs
+    #         **kwargs: matplotlib kwargs
 
-            '''
-            # setting default values for image plot with matplotlib
-            kwargs_defaults = {'cmap': plt.cm.gray, 
-                               'origin': 'lower'}
-            kwargs = kwargupdate(kwargs_defaults, kwargs)
-            # plotting image
-            if ax is None:
-                fig = plt.figure()
-                ax = fig.gca()
-            ax.contourf(self.data, **kwargs)
-            # outputing image
-            if savefig:
-                plt.savefig(figdir+self.name+'.png')
-            if show:
-                plt.show()
-
-    def hdr_window(self):
-        header_window = ctk.CTk()
-        header_window.title("Header")
-        header_window.geometry("600x720")
-        # Create a Text widget to display text
-        header_text = self.hdr.__repr__()
-        header_widget = ctk.CTkTextbox(header_window, wrap="word")
-        # Insert vext
-        header_widget.insert("0.0", header_text)  
-        header_widget.pack(padx=5, pady=5, fill='both') 
-        header_window.mainloop()
-
-    def __repr__(self):
-        # wcs
-        if self.wcs is not None:
-            wcs = True
-        else: 
-            wcs = False
-        # error
-        if self.err is not None:
-            err = True
-        else: 
-            err = False      
-        # mask
-        if self.mask is not None:
-            mask = True
-        else: 
-            mask = False
-        return (f"Image label: {self.label} \n"
-                f" Shape: {self.shape} \n"
-                f" WCS: {wcs} \n"
-                f" Error array: {err} \n"
-                f" Mask: {mask} \n")
+    #         '''
+    #         # setting default values for image plot with matplotlib
+    #         kwargs_defaults = {'cmap': plt.cm.gray, 
+    #                            'origin': 'lower'}
+    #         kwargs = kwargupdate(kwargs_defaults, kwargs)
+    #         # plotting image
+    #         if ax is None:
+    #             fig = plt.figure()
+    #             ax = fig.gca()
+    #         ax.contourf(self.data, **kwargs)
+    #         # outputing image
+    #         if savefig:
+    #             plt.savefig(figdir+self.name+'.png')
+    #         if show:
+    #             plt.show()

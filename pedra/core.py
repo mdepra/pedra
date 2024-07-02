@@ -474,7 +474,7 @@ class Image(object):
         header_widget = ctk.CTkTextbox(header_window, wrap="word")
         # Insert vext
         header_widget.insert("0.0", header_text)  
-        header_widget.pack(padx=5, pady=5, fill='both') 
+        header_widget.pack(expand=True, fill='both') 
         header_window.mainloop()
 
 

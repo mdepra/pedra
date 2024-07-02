@@ -82,15 +82,12 @@ class CardinalViewer:
                 origin = (x_min + x * (x_max - x_min), y_min + y * (y_max - y_min))
         else:
             origin = loc
-
         # Adjust arrow length based on axis limits
         arrow_length_x = size * (x_max - x_min)
         arrow_length_y = size * (y_max - y_min)
-
         # Rotation matrix
         theta = np.radians(angle)
         rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-
         # Plot each arrow with rotation
         for direction in self.directions:
             rotated_vector = np.dot(rotation_matrix, self.directions_positions[direction])
@@ -98,14 +95,6 @@ class CardinalViewer:
                      rotated_vector[0] * arrow_length_x, 
                      rotated_vector[1] * arrow_length_y,
                      **kwargs)
-            # ax.arrow(
-            #     origin[0], origin[1], 
-            #     rotated_vector[0] * arrow_length_x,
-            #     rotated_vector[1] * arrow_length_y,
-            #     head_width=0.02 * (x_max - x_min), head_length=0.03 * (y_max - y_min), 
-            #     fc='blue', ec='blue'
-            # )
-
             ax.text(origin[0] + rotated_vector[0] * (arrow_length_x + label_spacer * (x_max - x_min)), 
                     origin[1] + rotated_vector[1] * (arrow_length_y + label_spacer * (y_max - y_min)), 
                     direction, **label_kwargs)
@@ -166,7 +155,6 @@ class ImageViewer:
         self.fig = None
         self.im = None
 
-
     def plot(self, image, ax=None, fig=None,
              cardinal_kwargs=None, 
              label_kwargs=None,
@@ -185,8 +173,6 @@ class ImageViewer:
                self.ax = plt.gca()
                self.ax.set_xlabel('X (px)', **label_kwargs)
                self.ax.set_ylabel('Y (px)', **label_kwargs)
-
-
         # setting default values for image plot with matplotlib
         self.vmin, self.vmax = np.nanpercentile(image.data, (2, 98))
         kwargs_defaults = {'cmap': plt.cm.gray, 
@@ -194,9 +180,9 @@ class ImageViewer:
                            'vmax': self.vmax,
                            'origin': 'lower'}
         kwargs = kwargupdate(kwargs_defaults, kwargs)
-        
+        # Plot image
         self.im = self.ax.imshow(image.data, **kwargs)
-        
+        # Cardinal points
         if self.cardinal is not None:
             if cardinal_kwargs is None:
                 cardinal_kwargs = {}   ## -> implement this
@@ -204,29 +190,23 @@ class ImageViewer:
             caview.plot(fig=fig, ax=self.ax,
                         angle = image.north_angle(),
                         **cardinal_kwargs)
-
-        
+        # Constrast sliders        
         if self.vsliders:
             slider_limit_low, slider_limit_upp = np.nanpercentile(image.data, (0.1, 99.9))
             if self.backend == 'module://matplotlib_inline.backend_inline':
                 # Use ipywidgets sliders for Jupyter Notebooks
-                
-                self.s_vmin = widgets.FloatSlider(
-                    value=self.vmin, 
-                    min=slider_limit_low, 
-                    max=slider_limit_upp / 2., 
-                    step=0.01, 
-                    description='vmin',
-                    orientation='vertical'
-                )
-                self.s_vmax = widgets.FloatSlider(
-                    value=self.vmax, 
-                    min=slider_limit_low, 
-                    max=slider_limit_upp, 
-                    step=0.01, 
-                    description='vmax',
-                    orientation='vertical'
-                )
+                self.s_vmin = widgets.FloatSlider(value=self.vmin, 
+                                                  min=slider_limit_low, 
+                                                  max=slider_limit_upp / 2., 
+                                                  step=0.01, 
+                                                  description='vmin',
+                                                  orientation='vertical')
+                self.s_vmax = widgets.FloatSlider(value=self.vmax, 
+                                                  min=slider_limit_low, 
+                                                  max=slider_limit_upp, 
+                                                  step=0.01, 
+                                                  description='vmax',
+                                                  orientation='vertical')
                 display(widgets.HBox([self.s_vmin, self.s_vmax]))
                 self.s_vmin.observe(self.update_ipywidgets, names='value')
                 self.s_vmax.observe(self.update_ipywidgets, names='value')
@@ -254,7 +234,6 @@ class ImageViewer:
             plt.subplots_adjust(left=0.1, right=0.75, top=0.95, bottom=0.05, wspace=0.15)
         return self.fig, self.ax
     
-    
     def update_ipywidgets(self, change):
         """
         Update the colormap limits when the ipywidgets sliders change.
@@ -280,3 +259,8 @@ class ImageViewer:
         self.vmax = self.s_vmax.val
         self.im.set_clim(vmin=self.vmin, vmax=self.vmax)
         self.fig.canvas.draw_idle()
+
+
+class Blinker:
+    r"""
+    """

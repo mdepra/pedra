@@ -580,8 +580,8 @@ class Image(object):
 
     def view(self, ax=None, fig=None,
              show=False, savefig=False, figdir='.',
-             wcs=True, 
-             cardinal='NE',
+             wcs=False, 
+             cardinal=None,
              sundirection=True,
              cardinal_kwargs=None, 
              label_kwargs=None,

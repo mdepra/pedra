@@ -62,3 +62,37 @@ def flatcorrect(img, flat, prefix='f'):
     fimg.label = prefix + img.label
     fimg.hdr['PEDRA_FLATCORR'] = True
     return fimg
+
+
+def combine(imglist, label='combine', metric='median', axis=0):
+    r''' Combines a list of images using the mean or the median.
+
+    Parameters
+    -----------
+    imglist: list
+        List of fits file to be combined
+
+    label: str
+        Output file. If save=True
+
+    metric: str
+        Method of combination. Default is the mean.
+        Options: Mean, Median
+
+    Returns
+    --------
+    Combined Image object
+    '''
+    imgs_arr = [fits.data for fits in imglist]
+    # applying combination method
+    if metric == 'mean':
+        img_combine = np.mean(imgs_arr, axis=axis)
+    if metric == 'median':
+        img_combine = np.median(imgs_arr, axis=axis)
+    if metric == 'sum':
+        img_combine = np.sum(imgs_arr, axis=axis)
+    # producing new image
+    img = Image(img_combine, imglist[0].hdr, wcs=imglist[0].wcs, label=label)
+    img.hdr['PEDRA_COMBINE'] = 'Combined image'
+    img.hdr['PEDRA_COMBINE_METRIC'] = metric
+    return img

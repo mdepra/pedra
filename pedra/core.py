@@ -21,6 +21,20 @@ warnings.simplefilter('ignore', category=VerifyWarning)
 
 from .viewer import ImageViewer
 
+def check_fits_structure(imgfile, **kwargs):
+    r"""
+    Show image from file. 
+
+    Parameters
+    ----------
+    imgfile: string
+        Image file path.
+
+    """
+    hdu = fits.open(imgfile, **kwargs)
+    print(hdu.info())
+    # return hdu.info()
+
 
 def loadimage_batch(imglist, data_ext=0, header_ext=0, wcs_ext=None,
                     err_ext=None, mask=None, labels=None, **kwargs):
@@ -71,7 +85,7 @@ def loadimage_batch(imglist, data_ext=0, header_ext=0, wcs_ext=None,
     return imgs
 
 
-def loadimage(imgfile, data_ext=[1,2], header_ext=0, wcs_ext=None, 
+def loadimage(imgfile, data_ext=1, header_ext=0, wcs_ext=None, 
               err_ext=None, mask=None, label=None, **kwargs):
     r"""
     Load Image from file. 

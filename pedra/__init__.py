@@ -1,7 +1,7 @@
 r'''
 '''
 
-from .core import Image, loadimage, loadimage_batch, loadmosaic
+from .core import Image, loadimage, loadimage_batch, loadmosaic, check_fits_structure
 from .viewer import CardinalViewer, ImageViewer
 from .reduc import biascorrect, flatcorrect
 from .util import smallbody_ephem

@@ -5,14 +5,15 @@ import copy
 import warnings
 from scipy.ndimage import rotate
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
 from astropy.io import fits
 from astropy import wcs
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import rebin
 import customtkinter as ctk
-
+from reproject import reproject_interp
+from reproject.mosaicking import find_optimal_celestial_wcs, reproject_and_coadd
 
 from astropy.io.fits.verify import VerifyWarning
 import warnings
@@ -70,8 +71,8 @@ def loadimage_batch(imglist, data_ext=0, header_ext=0, wcs_ext=None,
     return imgs
 
 
-def loadimage(imgfile, data_ext=0, header_ext=0, wcs_ext=None,
-              err_ext=None, mask=None, label=None, **kwargs): # -> implement method to merge images or headers
+def loadimage(imgfile, data_ext=[1,2], header_ext=0, wcs_ext=None, 
+              err_ext=None, mask=None, label=None, **kwargs):
     r"""
     Load Image from file. 
 
@@ -126,6 +127,52 @@ def loadimage(imgfile, data_ext=0, header_ext=0, wcs_ext=None,
         err_ext = np.array(hdu[err_ext].data, dtype=np.float64, order='F')
     img = Image(arr, hdr, wcs_ext, err_ext, mask, label)
     return img
+
+
+def loadmosaic(imgfile, data_ext=[1,2], header_ext=0, label=None, **kwargs): 
+    r"""
+    Load Mosaic from FITS file. 
+
+    Parameters
+    ----------
+    imgfile: string
+        Image file path.
+
+    data_ext: int 
+        Fits file extention for image data. 
+        Default is 0. 
+
+    header_ext: int 
+        Fits file extention for header info. 
+        Default is 0. 
+        
+    label: string (Optional)
+        Image label. If not specified will get the base filename as label. 
+
+    **kwargs: Accepts kwargs for Astropy.io.fits.open
+    
+    Returns
+    -------
+    PEDRA Image Object.    
+    """
+    # Label
+    if label is None:
+        label = os.path.basename(imgfile)
+    # Header
+    hdu = fits.open(imgfile, **kwargs)   
+    hdr = hdu[header_ext].header 
+    # Image data
+    input_data = []
+    for ext in data_ext:
+        data1 = hdu[ext].data
+        wcs1 = wcs.WCS(hdu[ext].header)
+        input_data.append((data1, wcs1))
+    # Find the optimal WCS for the mosaic
+    wcs_out, shape_out = find_optimal_celestial_wcs(input_data)
+    # Reproject and coadd the input images into a single mosaic
+    mosaic_data, _ = reproject_and_coadd(input_data, wcs_out, shape_out=shape_out, reproject_function=reproject_interp)
+    img = Image(mosaic_data, hdr, wcs_out, err=None, mask=None, label=label)
+    return img    
 
 
 class Image(object):
@@ -256,8 +303,24 @@ class Image(object):
         delta_row = row - center_row
         delta_col = col - center_col
         return delta_row, delta_col
+    
+    def ephem_from_pix(self, X, Y):
+        r"""
+        """
+        if self.wcs is None:
+            raise Exception("WCS not specified") 
+            # data_filled = np.nan_to_num(self.data, nan=0.0)
+        ra, dec = list(np.array(self.wcs.pixel_to_world_values(X, Y)))   
+        return SkyCoord(ra, dec, unit=u.deg)
 
-
+    def pix_from_ephem(self, ra, dec):
+        r"""
+        """
+        if self.wcs is None:
+            raise Exception("WCS not specified") 
+        # Calculate the position angle of celestial north at the image center
+        x, y = list(np.array(self.wcs.world_to_pixel_values(ra, dec)))   
+        return x, y
 
     def trim(self, tlims=[[50, 4110], [950, 1200]], prefix='t'):
         r"""
@@ -504,7 +567,6 @@ class Image(object):
     def view(self, ax=None, fig=None,
              show=False, savefig=False, figdir='.',
              wcs=True, 
-             vsliders=False, 
              cardinal='NE',
              sundirection=True,
              cardinal_kwargs=None, 
@@ -533,13 +595,12 @@ class Image(object):
 
             ''' 
             viewer = ImageViewer(wcs=wcs, 
-                                 vsliders=vsliders, 
                                  cardinal=cardinal,
                                  sundirection=sundirection)
-            fig, ax = viewer.plot(self, ax=ax, fig=fig,
-                                  cardinal_kwargs=cardinal_kwargs, 
-                                  label_kwargs=label_kwargs,
-                                  **kwargs)
+            fig, ax = viewer(self, ax=ax, fig=fig,
+                             cardinal_kwargs=cardinal_kwargs, 
+                             label_kwargs=label_kwargs,
+                             **kwargs)
 
             if savefig:
                 plt.savefig(figdir+self.name+'.png')

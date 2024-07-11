@@ -1,9 +1,7 @@
 # %matplotlib qt
 import matplotlib.pyplot as plt
 import numpy as np
-import ipywidgets as widgets
-from IPython.display import display
-from matplotlib.widgets import Slider
+
 from cana.util import kwargupdate
 
 
@@ -17,16 +15,18 @@ class CardinalViewer:
         The figure object for the plot.
     ax : matplotlib.axes.Axes
         The axes object for the plot.
-    directions
-    origin
-    colors
+    directions: str
+        Cardinal directions that will be ploted. 
     """
 
     def __init__(self, directions='NSEW'):
         r"""
         Initialize CardinalViewer class.
 
-
+        Parameters
+        ----------
+        directions: str
+            Cardinal directions that will be ploted. 
         """
         # directions
         self.directions = [*directions]
@@ -50,10 +50,43 @@ class CardinalViewer:
 
     
     def plot(self, ax=None, fig=None, 
-             loc='lower right', angle=0, label_spacer=0.075,
-             size=0.05,
-             label_kwargs=None, **kwargs):
+             loc='lower right', angle=0, size=0.05, 
+             label_spacer=0.075, label_kwargs=None, **kwargs):
         r"""
+        Plot the cardinal directions.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            The axes object for the plot.
+
+        fig : matplotlib.figure.Figure
+            The figure object for the plot.
+
+        loc: str or tuple
+            The location of the cardinal directions on the image.
+            Accepted values are 'upper left', 'upper right', 'lower left', 'lower right', 
+            'upper center', 'lower center', 'center left', 'center right' and 'center'.
+            The location can also be a 2-tuple giving the coordinates for the plot.
+
+        angle: float
+            The rotation angle for the cardinal plot. 
+
+        size: float
+            Arrows size.
+
+        label_spacer: float
+            The space between the arrows and labels of the cardinal points. 
+
+        label_kwargs: dict (optional)
+            Matplotlib .text parameters for the cardinal points labels. 
+
+        **kwargs
+            Matplotlib .arrow parameters for the cardinal points arrows.
+        
+        Returns
+        -------
+        fig, ax
         """
         # matplotlib figure and axis
         if fig is None:
@@ -130,7 +163,6 @@ class ImageViewer:
     """
 
     def __init__(self, wcs=True, 
-                 vsliders=True, 
                  cardinal=None,
                  sundirection=True):
         """
@@ -143,7 +175,6 @@ class ImageViewer:
             The colormap to be used for displaying the image (default is 'gray').
         """
         self.wcs = wcs
-        self.vsliders = vsliders
         self.cardinal = cardinal
         self.sundirection = sundirection
         # Determine the backend
@@ -155,24 +186,36 @@ class ImageViewer:
         self.fig = None
         self.im = None
 
-    def plot(self, image, ax=None, fig=None,
+    def __call__(self, image, ax=None, fig=None,
              cardinal_kwargs=None, 
              label_kwargs=None,
              **kwargs):
         r"""
+        Plot the cardinal directions.
+
+        ax : matplotlib.axes.Axes
+            The axes object for the plot.
+
+        fig : matplotlib.figure.Figure
+            The figure object for the plot.
         """ 
         label_kwargs_defaults = {'fontsize': 14}
         label_kwargs = kwargupdate(label_kwargs_defaults, label_kwargs)
         # matplotlib figure and axis
         if fig is None:
             self.fig = plt.gcf()
+        else:
+            self.fig = fig
         if ax is None:
             if (image.wcs is not None) & self.wcs:
-                   self.ax = plt.subplot(projection=image.wcs)
+                self.ax = plt.subplot(projection=image.wcs)
             else:
-               self.ax = plt.gca()
-               self.ax.set_xlabel('X (px)', **label_kwargs)
-               self.ax.set_ylabel('Y (px)', **label_kwargs)
+                self.ax = plt.gca()
+                self.ax.set_xlabel('X (px)', **label_kwargs)
+                self.ax.set_ylabel('Y (px)', **label_kwargs)
+        else:
+            self.ax = ax
+       
         # setting default values for image plot with matplotlib
         self.vmin, self.vmax = np.nanpercentile(image.data, (2, 98))
         kwargs_defaults = {'cmap': plt.cm.gray, 
@@ -190,77 +233,6 @@ class ImageViewer:
             caview.plot(fig=fig, ax=self.ax,
                         angle = image.north_angle(),
                         **cardinal_kwargs)
-        # Constrast sliders        
-        if self.vsliders:
-            slider_limit_low, slider_limit_upp = np.nanpercentile(image.data, (0.1, 99.9))
-            if self.backend == 'module://matplotlib_inline.backend_inline':
-                # Use ipywidgets sliders for Jupyter Notebooks
-                self.s_vmin = widgets.FloatSlider(value=self.vmin, 
-                                                  min=slider_limit_low, 
-                                                  max=slider_limit_upp / 2., 
-                                                  step=0.01, 
-                                                  description='vmin',
-                                                  orientation='vertical')
-                self.s_vmax = widgets.FloatSlider(value=self.vmax, 
-                                                  min=slider_limit_low, 
-                                                  max=slider_limit_upp, 
-                                                  step=0.01, 
-                                                  description='vmax',
-                                                  orientation='vertical')
-                display(widgets.HBox([self.s_vmin, self.s_vmax]))
-                self.s_vmin.observe(self.update_ipywidgets, names='value')
-                self.s_vmax.observe(self.update_ipywidgets, names='value')
-            else:
-                # Use matplotlib sliders for external window (Qt)
-                axcolor = 'lightgoldenrodyellow'
-                # Position sliders on the right side of the image with the same height as the image
-                ax_vmin = plt.axes([0.80, 0.1, 0.03, 0.8], facecolor=axcolor)
-                ax_vmax = plt.axes([0.90, 0.1, 0.03, 0.8], facecolor=axcolor)
-                
-                self.s_vmin = Slider(ax_vmin, 'vmin', 
-                                     slider_limit_low, 
-                                     slider_limit_upp, 
-                                     valinit=self.vmin, 
-                                     orientation='vertical')
-                self.s_vmax = Slider(ax_vmax, 'vmax', 
-                                     slider_limit_low, 
-                                     slider_limit_upp, 
-                                     valinit=self.vmax, 
-                                     orientation='vertical')
-                
-                self.s_vmin.on_changed(self.update_matplotlib)
-                self.s_vmax.on_changed(self.update_matplotlib)
-            # Adjust layout
-            plt.subplots_adjust(left=0.1, right=0.75, top=0.95, bottom=0.05, wspace=0.15)
         return self.fig, self.ax
-    
-    def update_ipywidgets(self, change):
-        """
-        Update the colormap limits when the ipywidgets sliders change.
-
-        Parameters:
-        change : dict
-            The change dictionary from the ipywidgets observe event.
-        """
-        self.vmin = self.s_vmin.value
-        self.vmax = self.s_vmax.value
-        self.im.set_clim(vmin=self.vmin, vmax=self.vmax)
-        self.fig.canvas.draw()
-        
-    def update_matplotlib(self, val):
-        """
-        Update the colormap limits when the matplotlib sliders change.
-
-        Parameters:
-        val : float
-            The new value from the matplotlib Slider event.
-        """
-        self.vmin = self.s_vmin.val
-        self.vmax = self.s_vmax.val
-        self.im.set_clim(vmin=self.vmin, vmax=self.vmax)
-        self.fig.canvas.draw_idle()
 
 
-class Blinker:
-    r"""
-    """

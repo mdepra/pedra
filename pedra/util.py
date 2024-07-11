@@ -58,8 +58,35 @@ def smallbody_ephem_header(img, location='@hst',
                            targetkey='TARGNAME', datekey='DATE-OBS', 
                            timekey='TIME-OBS', exptimekey='EXPTIME', 
                            dateformat='%Y-%m-%d %H:%M:%S',
-                           values=['RA', 'DEC', 'V']):
+                           ephem=['RA', 'DEC', 'V']):
     r"""
+    Astroquery wrapper function for obtaining a solar system small body ephemerides.
+
+    Parameters
+    ----------
+    location: str
+        JPL or MPC Observatory code.
+    
+    targetkey: str
+        Header key for small body number, name or designation.
+    
+    datekey: str
+        Header key for date of asteroid observation.
+    
+    time: str
+        Header key for time of observation.
+    
+    dateformat: str
+        Date and time formats. Default is '%Y-%m-%d %H:%M:%S'
+    
+    ephem: list
+        Ephemeride keys that will be returned. 
+        Full reference of supported values in:
+        https://astroquery.readthedocs.io/en/latest/api/astroquery.jplhorizons.HorizonsClass.html#astroquery.jplhorizons.HorizonsClass.ephemerides  
+    
+    Returns
+    -------
+    Table with ephemerides
     """
     # Asteroid name
     name = img.hdr[targetkey].strip().upper().replace('-', ' ')
@@ -73,7 +100,7 @@ def smallbody_ephem_header(img, location='@hst',
 
     hor = Horizons(id=name,  location=location,
                     epochs=[jd])
-    ephem = hor.ephemerides()
-    if values is not None:
-        ephem = ephem[values]
-    return ephem
+    ephem_ = hor.ephemerides()
+    if ephem is not None:
+        ephem_ = ephem_[ephem]
+    return ephem_

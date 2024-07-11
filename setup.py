@@ -37,6 +37,10 @@ INSTALL_REQUIRES = [
     'pyyaml',
     'astropy',
     'photutils',
+    'rebin',
+    'twirl',
+    'reproject',
+    'ipywidgets'
 ]
 
 PYTHON_REQUIRES = ">=3.6"

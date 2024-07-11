@@ -523,7 +523,7 @@ class Image(object):
         img.data = self.data + value
         return img
 
-    def __div__(self, value):
+    def __truediv__(self, value):
         img = self.copy()
         if isinstance(value, Image):
             assert len(self.data) == len(value.data)

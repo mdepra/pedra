@@ -40,7 +40,8 @@ INSTALL_REQUIRES = [
     'rebin',
     'twirl',
     'reproject',
-    'ipywidgets'
+    'ipywidgets',
+    'ipympl'
 ]
 
 PYTHON_REQUIRES = ">=3.6"

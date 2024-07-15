@@ -215,7 +215,7 @@ class ImageViewer:
                 self.ax.set_ylabel('Y (px)', **label_kwargs)
         else:
             self.ax = ax
-       
+        self.ax.set_title(image.label)
         # setting default values for image plot with matplotlib
         self.vmin, self.vmax = np.nanpercentile(image.data, (2, 98))
         kwargs_defaults = {'cmap': plt.cm.gray, 

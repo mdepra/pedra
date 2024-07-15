@@ -73,7 +73,7 @@ def smallbody_ephem_header(img, location='@hst',
     datekey: str
         Header key for date of asteroid observation.
     
-    time: str
+    timekey: str
         Header key for time of observation.
     
     dateformat: str
@@ -104,3 +104,58 @@ def smallbody_ephem_header(img, location='@hst',
     if ephem is not None:
         ephem_ = ephem_[ephem]
     return ephem_
+
+
+def group_by_header(imglist, by='FILTER2'):
+    r"""
+    Group 
+    
+    Parameters
+    ----------
+    imglist: list
+        List of PEDRA images to be sorted.
+    """
+    imgs_group = {}
+    for img in imglist:
+        if img.hdr[by] in imgs_group.keys():
+            imgs_group[img.hdr[by]].append(img)
+        else:
+            imgs_group[img.hdr[by]] = [img]         
+    return imgs_group
+
+
+def sort_by_date(imglist, datekey='DATE-OBS', timekey='TIME-OBS', 
+                 dateformat='%Y-%m-%d %H:%M:%S'):
+    r"""
+    Sort an image list based on header date of observation.
+
+    Parameters
+    ----------
+    imglist: list
+        List of PEDRA images to be sorted.
+    
+    datekey: str
+        Header key for date of asteroid observation.
+
+    timekey: str
+        Header key for time of observation.
+    
+    dateformat: str
+        Date and time formats. Default is '%Y-%m-%d %H:%M:%S'
+    
+    Returns
+    -------
+    Sorted list
+    """
+    jds = []
+    for img in imglist:
+        if timekey is None:
+            date = f"{img.hdr[datekey].strip()}"
+        else:
+            date = f"{img.hdr[datekey].strip()} {img.hdr[timekey].strip()}"
+            date = datetime.strptime(date, dateformat)
+            jds.append(Time(date).jd)
+    jds = np.array(jds)
+    args = np.argsort(jds)
+    imglist = [imglist[int(i)] for i in args]
+    return imglist

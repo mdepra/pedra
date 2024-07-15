@@ -35,7 +35,7 @@ def biascorrect(img, bias, prefix='b'):
     # removing bias
     bimg = img - bias
     bimg.label = prefix + bimg.label
-    bimg.hdr['PEDRA_BIASCORR'] = True
+    bimg.hdr['PEDRA_BIASCORR'] = 'True'
     return bimg
 
 
@@ -60,7 +60,7 @@ def flatcorrect(img, flat, prefix='f'):
     '''
     fimg = img / flat
     fimg.label = prefix + img.label
-    fimg.hdr['PEDRA_FLATCORR'] = True
+    fimg.hdr['PEDRA_FLATCORR'] = 'True'
     return fimg
 
 

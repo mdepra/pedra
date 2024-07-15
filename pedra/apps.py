@@ -55,6 +55,7 @@ class ContrastViewer(ImageViewer):
                          **kwargs)
         self.constrast_sliders(image, ax_sliders)
         plt.connect('key_press_event', self.toggle_selector)
+        
         return fig, ax_im, ax_sliders
     
     def select_scatter(self, radius=None, **kwargs):
@@ -86,7 +87,7 @@ class ContrastViewer(ImageViewer):
         self.s_vmin.on_changed(self.update_matplotlib)
         self.s_vmax.on_changed(self.update_matplotlib)
         # Adjust layout
-        plt.subplots_adjust(left=0.1, right=0.95, top=0.98, bottom=0.1, wspace=0.2, hspace=0.2)
+        plt.subplots_adjust(left=0.1, right=0.95, top=0.92, bottom=0.1, wspace=0.2, hspace=0.2)
         return self.fig, self.ax
              
 
@@ -168,6 +169,10 @@ class ContrastViewer(ImageViewer):
         r"""
         """
 
+    def close(self):
+        r"""
+        """
+        self.fig.close()
 
 class ImageListViewer(ContrastViewer):
 
@@ -184,6 +189,7 @@ class ImageListViewer(ContrastViewer):
                  ax_im=None, ax_contrast=None, ax_controls=None, fig=None,
                  cardinal_kwargs=None, 
                  label_kwargs=None,
+                 return_fig=False,
                  **kwargs):
         if fig is None:
             fig = plt.figure()
@@ -211,8 +217,8 @@ class ImageListViewer(ContrastViewer):
         self.cardinal_kwargs = cardinal_kwargs
         self.label_kwargs = label_kwargs
         self.kwargs = kwargs
-        # self.control_buttons(images)
-        return self.images, self.fig, ax_im, ax_controls, ax_contrast
+        if return_fig:
+            return self.images, self.fig, ax_im, ax_controls, ax_contrast
 
     def control_buttons(self, ax_controls):
         r"""
@@ -241,18 +247,16 @@ class ImageListViewer(ContrastViewer):
 
     def update_image(self, val):
         self.current_index = int(self.index_slider.val)
+        self.ax.set_title(self.images[self.current_index].label)
         self.im.set_data(self.images[self.current_index].data)
-        # super().__call__(self.images[self.current_index], ax=self.ax, fig=self.fig,
-        #           cardinal_kwargs=self.cardinal_kwargs, label_kwargs=self.label_kwargs)
         self.fig.canvas.draw_idle()
 
     def blink(self):
         while self.running and len(self.images) > 0:
             self.current_index = (self.current_index + 1) % len(self.images)
             self.index_slider.set_val(self.current_index)
+            self.ax.set_title(self.images[self.current_index].label)
             self.im.set_data(self.images[self.current_index].data)
-            # super().__call__(self.images[self.current_index], ax=self.ax, fig=self.fig,
-            #           cardinal_kwargs=self.cardinal_kwargs, label_kwargs=self.label_kwargs)
             self.fig.canvas.draw_idle()
             time.sleep(self.speed_slider.val)
 
@@ -274,6 +278,7 @@ class ImageListViewer(ContrastViewer):
                 self.current_index = 0
             self.index_slider.valmax = len(self.images) - 1
             if len(self.images) > 0:
+                self.ax.set_title(self.images[self.current_index].label)
                 self.im.set_data(self.images[self.current_index].data)
                 # super().__call__(self.images[self.current_index], ax=self.ax, fig=self.fig,
                 #           cardinal_kwargs=self.cardinal_kwargs, label_kwargs=self.label_kwargs)

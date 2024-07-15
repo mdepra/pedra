@@ -369,6 +369,38 @@ class Image(object):
             img.mask = self.mask[tlims[1][0]:tlims[1][1], tlims[0][0]:tlims[0][1]]
         return img
 
+    def trim_border(self, border=50, prefix='t'):
+        r"""
+        Trim the image border.
+
+        Parameters
+        -----------
+        tlims: list
+            The limits of the trim region.. The format should be:
+            [[<lower_x_lim>, <upper_x_lim>], [<lower_y_lim>, <upper_y_lim>]]
+
+        prefix: str
+            Prefix of the output image label. 
+
+        Returns
+        --------
+        Trimmed Image object
+        """
+        # generate output
+        img = self.copy()
+        # cutting image array
+        img.data = self.data[border:self.shape[0]-border, border:self.shape[1]-border]
+        # handlig label
+        if prefix is not None:
+            img.label = prefix + self.label
+        img.hdr['PEDRA_TRIM'] = border.__repr__()
+        # error array
+        if self.err is not None:
+            img.err = self.err[border:self.shape[0]-border, border:self.shape[1]-border]
+        # mask array
+        if self.mask is not None:
+            img.mask = self.mask[border:self.shape[0]-border, border:self.shape[1]-border]
+        return img
  
     def rebin(self, binsize=12,  prefix='r', func=np.sum): # -> implement copy img
         r"""
@@ -555,7 +587,7 @@ class Image(object):
         header_window.mainloop()
 
 
-    def __repr__(self):
+    def __repr____str__(self):
         # wcs
         if self.wcs is not None:
             wcs = True
@@ -577,7 +609,10 @@ class Image(object):
                 f" Error array: {err} \n"
                 f" Mask: {mask} \n")
     
-
+    
+    def __repr__(self):  
+        return f"image({self.label})"
+                
     def view(self, ax=None, fig=None,
              show=False, savefig=False, figdir='.',
              wcs=False, 

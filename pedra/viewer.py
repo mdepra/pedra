@@ -1,5 +1,7 @@
 # %matplotlib qt
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 
 from cana.util import kwargupdate
@@ -156,10 +158,6 @@ class ImageViewer:
         The axes object for the plot.
     im : matplotlib.image.AxesImage
         The image object for the plot.
-    s_vmin : ipywidgets.FloatSlider or matplotlib.widgets.Slider
-        The slider for adjusting the minimum colormap value.
-    s_vmax : ipywidgets.FloatSlider or matplotlib.widgets.Slider
-        The slider for adjusting the maximum colormap value.
     """
 
     def __init__(self, wcs=True, 
@@ -236,3 +234,155 @@ class ImageViewer:
         return self.fig, self.ax
 
 
+class SourceViewer:
+    r"""
+    A class to display an image with adjustable contrast sliders.
+
+    Attributes
+    ----------
+    image : pedra.Image
+        The image to be displayed.
+    cmap : str
+        The colormap to be used for displaying the image.
+    vmin : float
+        The minimum value for the colormap.
+    vmax : float
+        The maximum value for the colormap.
+    backend : str
+        The backend used by matplotlib.
+    fig : matplotlib.figure.Figure
+        The figure object for the plot.
+    ax : matplotlib.axes.Axes
+        The axes object for the plot.
+    im : matplotlib.image.AxesImage
+        The image object for the plot.
+    """
+
+    def __init__(self):
+        """
+        Initializes the ImageShower with the given image and colormap.
+
+        Parameters:
+        image : np.ndarray
+            The image to be displayed.
+        cmap : str, optional
+            The colormap to be used for displaying the image (default is 'gray').
+        """
+        # Determine the backend
+        self.backend = plt.get_backend()
+        # placeholders
+        self.ax = None
+        self.fig = None
+        self.im = None
+        
+
+    def __call__(self, source, ax=None, fig=None,
+             label_kwargs=None,
+             **kwargs):
+        r"""
+        Plot the cardinal directions.
+
+        ax : matplotlib.axes.Axes
+            The axes object for the plot.
+
+        fig : matplotlib.figure.Figure
+            The figure object for the plot.
+        """ 
+        label_kwargs_defaults = {'fontsize': 14}
+        label_kwargs = kwargupdate(label_kwargs_defaults, label_kwargs)
+        # matplotlib figure and axis
+        if fig is None:
+            self.fig = plt.gcf()
+        else:
+            self.fig = fig
+        if ax is None:
+            self.ax = plt.subplot(projection='3d')
+        else:
+            self.ax = ax
+        # self.ax.set_title(image.label)
+        # setting default values for image plot with matplotlib
+        # self.vmin, self.vmax = np.nanpercentile(image.data, (2, 98))
+        kwargs_defaults = {'cmap': plt.cm.gray, 
+                           'origin': 'lower'}
+        kwargs = kwargupdate(kwargs_defaults, kwargs)
+        # Plot source
+        x = np.arange(source.img.data.shape[1])
+        y = np.arange(source.img.data.shape[0])
+        x, y = np.meshgrid(x, y)
+        self.ax.plot_surface(x, y, source.img.data, cmap='viridis', edgecolor='none', alpha=0.5)
+
+        return self.fig, self.ax
+    
+
+    def view_fit(self, source, 
+                 label_kwargs=None, axis='xy',
+                 **kwargs):
+        r"""
+        """
+        label_kwargs_defaults = {'fontsize': 14}
+        label_kwargs = kwargupdate(label_kwargs_defaults, label_kwargs)
+        # matplotlib figure and axis
+        fig = plt.figure()
+        gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1])  # Define a 2-row grid
+        ax_main = fig.add_subplot(gs[0])
+        ax_res = fig.add_subplot(gs[1], sharex=ax_main)  # Share the x-axis with the main plot
+        if 'x' in axis:
+            x_data = source.img.sum(axis=0)
+            x_fit = source.fit.sum(axis=0)
+            ax_main.plot(range(x_data.shape[0]), x_data, lw=1.5, alpha=0.8, label='X')
+            ax_main.plot(range(x_fit.shape[0]), x_fit,  '-.', lw=1.5, alpha=0.8, label='X fit')
+            ax_res.plot(range(x_fit.shape[0]), x_data - x_fit, lw=1.5, alpha=0.8, label='X Residual')
+
+        if 'y' in axis:
+            y_data = source.img.sum(axis=1)
+            y_fit = source.fit.sum(axis=1)
+            ax_main.plot(range(y_data.shape[0]), y_data, lw=1.5, alpha=0.8, label='Y')
+            ax_main.plot(range(y_fit.shape[0]), y_fit, '-.', lw=1.5, alpha=0.8, label='Y fit')
+            ax_res.plot(range(y_fit.shape[0]), y_data - y_fit, '-.', lw=1.5, alpha=0.8, label='Y Residual')
+       
+        ax_res.set_xlabel("Axis (px)", **label_kwargs)
+        ax_main.set_ylabel("Counts", **label_kwargs)
+
+        ax_main.legend()
+        ax_res.legend(ncols=2)
+        return fig, ax_main, ax_res
+
+    def view_fit3D(self, source, ax=None, fig=None,
+             label_kwargs=None,
+             **kwargs):
+        r"""
+        Plot the cardinal directions.
+
+        ax : matplotlib.axes.Axes
+            The axes object for the plot.
+
+        fig : matplotlib.figure.Figure
+            The figure object for the plot.
+        """ 
+        label_kwargs_defaults = {'fontsize': 14}
+        label_kwargs = kwargupdate(label_kwargs_defaults, label_kwargs)
+        # matplotlib figure and axis
+        if fig is None:
+            self.fig = plt.gcf()
+        else:
+            self.fig = fig
+        if ax is None:
+            self.ax = plt.subplot(projection='3d')
+        else:
+            self.ax = ax
+        # self.ax.set_title(image.label)
+        # setting default values for image plot with matplotlib
+        # self.vmin, self.vmax = np.nanpercentile(image.data, (2, 98))
+        kwargs_defaults = {'color': 'firebrick', 
+                           'alpha': 0.5,
+                           'rstride': 3,
+                           'cstride': 3}
+        kwargs = kwargupdate(kwargs_defaults, kwargs)
+        # Plot source
+        x = np.arange(source.img.data.shape[1])
+        y = np.arange(source.img.data.shape[0])
+        x, y = np.meshgrid(x, y)
+        self.ax.plot_surface(x, y, source.img.data, cmap='viridis', edgecolor='none', alpha=0.5)
+        self.ax.plot_wireframe(x, y, source.fit.data, **kwargs)
+
+        return self.fig, self.ax

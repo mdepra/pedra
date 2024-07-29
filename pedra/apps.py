@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from .viewer import ImageViewer
-
+from .sources import SourcesDataFrame
 
 from matplotlib.widgets import Button, Slider, RectangleSelector
 import time
@@ -22,6 +22,7 @@ class ContrastViewer(ImageViewer):
         self.rect_selector = None
         self.rect_verts = None
         self.rect_area = None
+        self.image = None
 
 
     def __call__(self, image, 
@@ -36,7 +37,8 @@ class ContrastViewer(ImageViewer):
 
         fig : matplotlib.figure.Figure
             The figure object for the plot.
-        """ 
+        """
+        self.image = image
         if fig is None:
             fig = plt.figure()
             plt.tight_layout()
@@ -174,6 +176,19 @@ class ContrastViewer(ImageViewer):
         """
         self.fig.close()
 
+    def rectangle_to_source(self):
+        r"""
+        """
+    
+    def positions_to_source(self, framesize=50):
+        r"""
+        """
+        coords = np.array(self.positions)
+        sources_coords = {'x': coords[:, 1],
+                          'y': coords[:,0]}
+        sources = SourcesDataFrame(sources_coords, img=self.image)
+        return sources
+
 class ImageListViewer(ContrastViewer):
 
     def __init__(self, wcs=True, cardinal=None, sundirection=True):
@@ -286,3 +301,9 @@ class ImageListViewer(ContrastViewer):
                 self.ax.clear()
                 self.fig.canvas.draw_idle()
 
+
+class CenterFitter(ContrastViewer):
+    
+    def __init__(self):
+        r"""
+        """

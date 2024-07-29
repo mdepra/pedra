@@ -2,10 +2,7 @@ from .core import Image
 from photutils import CircularAperture, aperture_photometry
 import numpy as np
 
-def extract_sources(img, nsource=10):
-    r"""
-    """
-    img.data
+
 
 
 def circular_photometry(img, x_center, y_center, radii):

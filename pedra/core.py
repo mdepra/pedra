@@ -264,8 +264,32 @@ class Image(object):
         Data array shape.
         """
         return self.data.shape
+    
+    def sum(self, **kwargs):
+        r"""
+        """
+        return np.sum(self.data, **kwargs)
 
+    def median(self, **kwargs):
+        r"""
+        """
+        return np.nanmedian(self.data, **kwargs)
+    
+    def mean(self, **kwargs):
+        r"""
+        """
+        return np.nanmean(self.data, **kwargs)
 
+    def min(self, **kwargs):
+        r"""
+        """
+        return np.nanmin(self.data, **kwargs)
+
+    def max(self, **kwargs):
+        r"""
+        """
+        return np.nanmax(self.data, **kwargs)
+       
     def copy(self, deep=True):
         r"""Return a copy of the object."""
         if deep:
@@ -652,7 +676,7 @@ class Image(object):
                              **kwargs)
 
             if savefig:
-                plt.savefig(figdir+self.name+'.png')
+                plt.savefig(savefig)
             if show:
                 plt.show()
             return fig, ax

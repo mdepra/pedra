@@ -184,8 +184,8 @@ class ContrastViewer(ImageViewer):
         r"""
         """
         coords = np.array(self.positions)
-        sources_coords = {'x': coords[:, 1],
-                          'y': coords[:,0]}
+        sources_coords = {'x': coords[:, 0],
+                          'y': coords[:,1]}
         sources = SourcesDataFrame(sources_coords, img=self.image)
         return sources
 

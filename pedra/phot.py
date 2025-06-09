@@ -1,5 +1,5 @@
 from .core import Image
-from photutils import CircularAperture, aperture_photometry
+from photutils.aperture import CircularAperture, aperture_photometry
 import numpy as np
 
 

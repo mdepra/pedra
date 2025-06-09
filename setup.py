@@ -29,7 +29,7 @@ PACKAGES = ['pedra']
 # DEPENDENCIES
 ##############
 INSTALL_REQUIRES = [
-    'cana-asteroids',
+    # 'cana-asteroids',
     'pandas',
     'scipy',
     'numpy',
@@ -41,7 +41,8 @@ INSTALL_REQUIRES = [
     'twirl',
     'reproject',
     'ipywidgets',
-    'ipympl'
+    'ipympl',
+    'customtkinter'
 ]
 
 PYTHON_REQUIRES = ">=3.6"

@@ -1,14 +1,19 @@
+import time
+from threading import Thread
 import matplotlib.pyplot as plt
 import numpy as np
 from .viewer import ImageViewer
 from .sources import SourcesDataFrame
 
-from matplotlib.widgets import Button, Slider, RectangleSelector
-import time
-from threading import Thread
+from matplotlib.widgets import Button, Slider, \
+                               RectangleSelector, \
+                               RadioButtons
+
+from matplotlib.colors import Normalize, LogNorm
 
 
-class ContrastViewer(ImageViewer):
+
+class BaseViewer(ImageViewer):
     r"""
     """
 
@@ -26,7 +31,7 @@ class ContrastViewer(ImageViewer):
 
 
     def __call__(self, image, 
-                 ax_im=None, ax_sliders=None, fig=None,
+                 ax=None, fig=None,
                  cardinal_kwargs=None, label_kwargs=None,
                  **kwargs):
         r"""
@@ -42,24 +47,36 @@ class ContrastViewer(ImageViewer):
         if fig is None:
             fig = plt.figure()
             plt.tight_layout()
-        if ax_im is None:
-            gs = fig.add_gridspec(1, 3, width_ratios=[10, 0.75, 0.75])
-            if (image.wcs is not None) & self.wcs:
-                ax_im = fig.add_subplot(gs[0, 0], projection=image.wcs)
-            else:
-                ax_im = fig.add_subplot(gs[0, 0])
-                ax_im.set_xlabel('X (px)')
-                ax_im.set_ylabel('Y (px)')
-            ax_sliders = [fig.add_subplot(gs[1]), fig.add_subplot(gs[2])]
+            
+        self.fig, self.ax = super().__call__(image, ax=ax, fig=fig,
+                                             cardinal_kwargs=cardinal_kwargs, 
+                                             label_kwargs=label_kwargs,
+                                             **kwargs)
+        self.ax.set_aspect('equal')  # or 'auto' if stretching is OK
+        self.ax.set_adjustable('box')  # Keeps axes fixed
 
-        super().__call__(image, ax=ax_im, fig=fig,
-                         cardinal_kwargs=cardinal_kwargs, label_kwargs=label_kwargs,
-                         **kwargs)
-        self.constrast_sliders(image, ax_sliders)
+        self.ax.figure.canvas.draw_idle()
         plt.connect('key_press_event', self.toggle_selector)
         
-        return fig, ax_im, ax_sliders
-    
+        return fig, ax
+
+    def update(self, new_image):
+        """
+        Update the displayed image with a new image while preserving current contrast limits.
+
+        Parameters
+        ----------
+        new_image : array-like
+            The new image data to display.
+        """
+        self.image = new_image
+        if hasattr(self, 'im'):
+            self.im.set_data(new_image.data)
+            self.im.set_clim(vmin=self.vmin, vmax=self.vmax)
+            self.fig.canvas.draw_idle()
+        else:
+            raise RuntimeError("No existing image to update. Please call the viewer with an image first.")
+
     def select_scatter(self, radius=None, **kwargs):
         r"""
         """
@@ -67,32 +84,7 @@ class ContrastViewer(ImageViewer):
         if radius is not None:
             self.scattersize = 50
         self.scatter_selector = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
-
-
-    def constrast_sliders(self, image, ax=None):
-        r"""
-        """
-        ax_vmin, ax_vmax = ax
-        slider_limit_low, slider_limit_upp = np.nanpercentile(image.data, (0.1, 99))
-        # Use matplotlib sliders for external window (Qt)
-        self.s_vmin = Slider(ax_vmin, 'vmin', 
-                                slider_limit_low, 
-                                slider_limit_upp, 
-                                valinit=self.vmin, 
-                                orientation='vertical')
-        self.s_vmax = Slider(ax_vmax, 'vmax', 
-                                slider_limit_low, 
-                                slider_limit_upp, 
-                                valinit=self.vmax, 
-                                orientation='vertical')
-        
-        self.s_vmin.on_changed(self.update_matplotlib)
-        self.s_vmax.on_changed(self.update_matplotlib)
-        # Adjust layout
-        plt.subplots_adjust(left=0.1, right=0.95, top=0.92, bottom=0.1, wspace=0.2, hspace=0.2)
-        return self.fig, self.ax
-             
-
+         
     def update_matplotlib(self, val):
         """
         Update the colormap limits when the matplotlib sliders change.
@@ -188,6 +180,97 @@ class ContrastViewer(ImageViewer):
                           'y': coords[:,1]}
         sources = SourcesDataFrame(sources_coords, img=self.image)
         return sources
+
+
+class ContrastViewer(BaseViewer):
+    def __init__(self, wcs=True, cardinal=None, sundirection=True):
+        super().__init__(wcs, cardinal, sundirection)
+        self.image = None
+        self.scale_buttons = None
+        self.reset_btn = None
+
+    def __call__(self, image, 
+                 ax_im=None, ax_sliders=None, fig=None,
+                 cardinal_kwargs=None, label_kwargs=None,
+                 **kwargs):
+        if fig is None:
+            fig = plt.figure(figsize=(10, 6))     
+        outer_gs = fig.add_gridspec(1, 2, width_ratios=[10, 1.])
+        ax_im = fig.add_subplot(outer_gs[0, 0])
+        super().__call__(image, ax=ax_im, fig=fig,
+                       cardinal_kwargs=cardinal_kwargs, 
+                       label_kwargs=label_kwargs,
+                       **kwargs)
+        self.make_controls(outer_gs[0, 1], fig)
+
+    def make_controls(self, ax, fig):
+        # Right control panel: subgridspec with 3 rows
+        panel_gs = ax.subgridspec(3, 1, height_ratios=[3, 0.6, 1.2])
+        sliders_gs = panel_gs[0].subgridspec(1, 2)  # side-by-side sliders
+
+        ax_vmin = fig.add_subplot(sliders_gs[0])
+        ax_vmax = fig.add_subplot(sliders_gs[1])
+        ax_reset = fig.add_subplot(panel_gs[1])
+        ax_scale = fig.add_subplot(panel_gs[2])
+        ax_sliders = [ax_vmin, ax_vmax]
+        self.contrast_sliders(self.image, ax_sliders, ax_reset=ax_reset, ax_scale=ax_scale)
+
+        fig.tight_layout()
+        # return fig, ax_im, ax_sliders
+
+    def contrast_sliders(self, image, ax, ax_reset=None, ax_scale=None):
+        ax_vmin, ax_vmax = ax
+        slider_limit_low, slider_limit_upp = np.nanpercentile(image.data, (0.1, 99))
+
+        if not hasattr(self, 'vmin'):
+            self.vmin, self.vmax = np.nanpercentile(image.data, (2, 98))
+
+        self.s_vmin = Slider(ax_vmin, 'vmin', 
+                             slider_limit_low, slider_limit_upp, 
+                             valinit=self.vmin,
+                             orientation='vertical')
+        self.s_vmax = Slider(ax_vmax, 'vmax', 
+                             slider_limit_low, slider_limit_upp, 
+                             valinit=self.vmax,
+                             orientation='vertical')
+
+        self.s_vmin.on_changed(self.update_matplotlib)
+        self.s_vmax.on_changed(self.update_matplotlib)
+
+        if ax_reset:
+            self.reset_btn = Button(ax_reset, 'Reset')
+            self.reset_btn.on_clicked(lambda event: self.reset_contrast())
+
+        if ax_scale:
+            self.scale_buttons = RadioButtons(ax_scale, ['linear', 'log'])
+            self.scale_buttons.on_clicked(self.change_scale)
+
+        return self.fig, self.ax
+
+    def update_matplotlib(self, val):
+        if self.s_vmin.val < self.s_vmax.val:
+            self.vmin = self.s_vmin.val
+            self.vmax = self.s_vmax.val
+        self.im.set_clim(vmin=self.vmin, vmax=self.vmax)
+        self.fig.canvas.draw_idle()
+
+
+    def reset_contrast(self):
+        self.vmin, self.vmax = np.nanpercentile(self.image.data, (2, 98))
+        self.s_vmin.set_val(self.vmin)
+        self.s_vmax.set_val(self.vmax)
+        self.im.set_clim(vmin=self.vmin, vmax=self.vmax)
+        self.fig.canvas.draw_idle()
+
+    def change_scale(self, label):
+        if isinstance(label, tuple):
+            label = label[0]
+        if label == 'linear':
+            self.im.set_norm(Normalize(vmin=self.vmin, vmax=self.vmax))
+        elif label == 'log':
+            safe_vmin = max(self.vmin, 1e-3)
+            self.im.set_norm(LogNorm(vmin=safe_vmin, vmax=self.vmax))
+        self.fig.canvas.draw_idle()
 
 class ImageListViewer(ContrastViewer):
 
@@ -307,3 +390,6 @@ class CenterFitter(ContrastViewer):
     def __init__(self):
         r"""
         """
+
+
+

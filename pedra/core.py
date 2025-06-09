@@ -11,15 +11,16 @@ from astropy import wcs
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import rebin
-import customtkinter as ctk
 from reproject import reproject_interp
 from reproject.mosaicking import find_optimal_celestial_wcs, reproject_and_coadd
+import tkinter as tk
 
 from astropy.io.fits.verify import VerifyWarning
 import warnings
 warnings.simplefilter('ignore', category=VerifyWarning)
 
 from .viewer import ImageViewer
+from .header import HeaderWindow
 
 def check_fits_structure(imgfile, **kwargs):
     r"""
@@ -188,7 +189,6 @@ def loadmosaic(imgfile, data_ext=[1,2], header_ext=0, label=None, **kwargs):
     img = Image(mosaic_data, hdr, wcs_out, err=None, mask=None, label=label)
     return img    
 
-
 class Image(object):
     r"""
     Class to manipulate a fits Image file.
@@ -230,6 +230,9 @@ class Image(object):
         self.wcs = wcs
         self.err = err
         self.mask = mask
+        # placeholder auxiliary attributes
+        self.header_window = None
+        self.rotation = 0
 
     @property
     def hdr_keys(self):
@@ -542,17 +545,23 @@ class Image(object):
         angle = np.arctan2(delta_y, delta_x) * 180 / np.pi
         return angle
 
-    def align_north(self):
+    def align_cardinals(self):
         r"""
         """
         angle = self.north_angle()
+        self.rotate(angle)
+
+    def rotate(self, angle):
+        r"""
+        """
         if np.isnan(self.data).any():
             warnings.warn("Warning: np.nan values exists in image data. A mask will be created. \n"
                           "see")
             self.mask_nan()
         # Rotate the image and the mask
-        self.data = rotate(self.data, angle, reshape=True)
-        self.mask = rotate(self.mask.astype(float), angle, reshape=True) > 0.5
+        self.data = rotate(self.data,  angle, reshape=True, order=1, mode='constant', cval=np.nan)
+        if self.mask is not None:
+            self.mask = rotate(self.mask.astype(float), angle, reshape=True) <   0.5
         # self.mask_value()
         # Update the header with the new WCS information
         # Handle both PC and CD matrices
@@ -563,7 +572,42 @@ class Image(object):
         else:
             self.wcs.wcs.pc = np.dot(rotation_matrix, self.wcs.wcs.pc)
         self.mask_value(0, np.nan)
+        self.rotation += angle
+        self.trim_nan_edges()
 
+    def trim_nan_edges(self):
+        """
+        Trim the outermost rows and columns that contain only NaNs.
+        
+        Parameters:
+        -----------
+        image : np.ndarray
+            2D array of float values with np.nan padding around valid data.
+        
+        Returns:
+        --------
+        trimmed_image : np.ndarray
+            The cropped image with NaN-only edges removed.
+        """
+        # Find rows and columns with at least one non-NaN value
+        valid_rows = np.any(~np.isnan(self.data), axis=1)
+        valid_cols = np.any(~np.isnan(self.data), axis=0)
+
+        if not np.any(valid_rows) or not np.any(valid_cols):
+            raise ValueError("Image contains only NaNs.")
+
+        row_start, row_end = np.where(valid_rows)[0][[0, -1]]
+        col_start, col_end = np.where(valid_cols)[0][[0, -1]]
+
+        # Include the last index, so use +1
+        self.data = self.data[row_start:row_end+1, col_start:col_end+1]
+        self.mask = self.mask[row_start:row_end+1, col_start:col_end+1]
+
+    def reset_rotation(self):
+        r"""
+        """
+        angle = -self.rotation
+        self.rotate(angle)
 
     def __sub__(self, value):
         img = self.copy()
@@ -599,19 +643,11 @@ class Image(object):
 
 
     def hdr_window(self):
-        header_window = ctk.CTk()
-        header_window.title("Header")
-        header_window.geometry("600x720")
-        # Create a Text widget to display text
-        header_text = self.hdr.__repr__()
-        header_widget = ctk.CTkTextbox(header_window, wrap="word")
-        # Insert vext
-        header_widget.insert("0.0", header_text)  
-        header_widget.pack(expand=True, fill='both') 
-        header_window.mainloop()
+        r"""
+        """
+        frame = HeaderWindow(self)
 
-
-    def __repr____str__(self):
+    def info(self):
         # wcs
         if self.wcs is not None:
             wcs = True
@@ -632,7 +668,15 @@ class Image(object):
                 f" WCS: {wcs} \n"
                 f" Error array: {err} \n"
                 f" Mask: {mask} \n")
-    
+
+    def stats(self):
+        return (f"Image label: {self.label} \n"
+                f" Shape: {self.shape} \n"
+                f" Mean: {np.mean(self.data)} \n"
+                f" Median: {np.median(self.data)} \n"
+                f" StdDev: {np.std(self.data)} \n",
+                f" Min Count: {np.min(self.data)} \n",
+                f" Max Count: {np.max(self.data)} \n")
     
     def __repr__(self):  
         return f"image({self.label})"
